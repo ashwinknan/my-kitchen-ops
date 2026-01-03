@@ -9,25 +9,27 @@ export const optimizeCookingOps = async (
   cooks: number, 
   stoves: number
 ): Promise<OptimizedSchedule> => {
-  // Always initialize with the named parameter apiKey and use the process.env.API_KEY directly
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
-    You are a professional kitchen operations consultant. 
-    I have ${recipes.length} recipes to cook at the same time.
-    Available Resources: ${cooks} cooks and ${stoves} stove burners.
+    You are a professional chef. I need to cook ${recipes.length} dishes with ${cooks} people and ${stoves} stove burners.
     
-    RECIPE DATA FROM DATABASE (Use these exact steps and durations):
-    ${recipes.map(r => `- DISH: ${r.dishName}\n  STEPS: ${JSON.stringify(r.steps)}`).join('\n')}
+    RECIPES:
+    ${recipes.map(r => `- ${r.dishName}: ${JSON.stringify(r.steps)}`).join('\n')}
     
     TASK:
-    1. Create an interleaved schedule using the EXACT steps provided above. 
-    2. Group preparation tasks (chopping, washing) together at the beginning.
-    3. Maximize parallel work by assigning different steps to available cooks (IDs 1 to ${cooks}).
-    4. Ensure no more than ${stoves} steps using a 'stove' burner happen at once.
-    5. Return a logical timeline where 'timeOffset' is the minute each task starts.
+    - Create a step-by-step cooking timeline.
+    - Group chopping/prep at the start.
+    - Assign each step to a cook (1 to ${cooks}).
+    - Max ${stoves} stove burners at any time.
+    - Return a logical timeline where 'timeOffset' is the start minute.
     
-    Return the schedule in JSON format.
+    Return exactly this JSON structure:
+    {
+      "timeline": [{"timeOffset": number, "action": string, "involvedRecipes": string[], "assignees": number[], "isParallel": boolean}],
+      "totalDuration": number,
+      "criticalWarnings": string[]
+    }
   `;
 
   const response = await ai.models.generateContent({
@@ -61,13 +63,12 @@ export const optimizeCookingOps = async (
     }
   });
 
-  // Extract text directly from the response object
   const jsonStr = response.text?.trim() || "{}";
   return JSON.parse(jsonStr) as OptimizedSchedule;
 };
 
 /**
- * Suggests a meal plan based on inventory constraints using Gemini 3 Pro.
+ * Suggests a meal plan based on inventory constraints using Gemini 3 Flash for efficiency.
  */
 export const suggestMealPlan = async (
     allRecipes: Recipe[],
@@ -77,18 +78,16 @@ export const suggestMealPlan = async (
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
-      Database Recipes:
-      ${allRecipes.map(r => `- ${r.dishName} (${r.category})`).join('\n')}
+      Recipes: ${allRecipes.map(r => `${r.dishName} (${r.category})`).join(', ')}
+      Fridge has: "${fridgeVeggies}"
       
-      Fridge Contents: "${fridgeVeggies}"
-      
-      Suggest a ${days}-day plan (Breakfast, Lunch/Dinner, Snack for each day). 
-      ONLY use dishNames found in the list above. 
-      Return as a comma-separated list of EXACT dish names.
+      Pick recipes for a ${days}-day plan (Breakfast, Lunch/Dinner, Snack). 
+      ONLY use the exact names from the list above. 
+      Return names only, separated by commas.
     `;
   
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: prompt
     });
   
