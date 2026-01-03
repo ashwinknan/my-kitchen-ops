@@ -5,7 +5,6 @@ import { Recipe, RecipeCategory, MealPlanDay, OptimizedSchedule } from './types'
 import { fetchAllRecipes } from './services/recipeService';
 import { RecipeCard } from './components/RecipeCard';
 import { optimizeCookingOps, suggestMealPlan } from './services/geminiService';
-// Fix: Added missing RECIPES_COLLECTION import
 import { auth, USER_UID, getAuthError, RECIPES_COLLECTION } from './firebase';
 
 const App: React.FC = () => {
@@ -212,7 +211,7 @@ const App: React.FC = () => {
                   <p className="text-slate-300 leading-relaxed text-[11px]">
                     Anonymous Authentication is <span className="text-white underline font-bold">DISABLED</span> in your Firebase Console. 
                     <br/><br/>
-                    1. Go to <span className="text-white">Authentication > Sign-in method</span>.
+                    1. Go to <span className="text-white">Authentication &gt; Sign-in method</span>.
                     <br/>
                     2. Add <span className="text-white">Anonymous</span> provider.
                     <br/>
