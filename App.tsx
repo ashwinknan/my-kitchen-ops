@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Utensils, Calendar, ShoppingCart, Settings2, Flame, RefreshCcw, Check, Trash2, Plus, Minus, ChevronDown, ChevronUp, Database, WifiOff, AlertCircle, Terminal, Activity, ShieldAlert, X, Key, Info } from 'lucide-react';
+import { Search, Utensils, Calendar, ShoppingCart, Settings2, Flame, RefreshCcw, Check, Trash2, Plus, Minus, ChevronDown, ChevronUp, Database, WifiOff, AlertCircle, Terminal, Activity, ShieldAlert, X, Key, Info, ExternalLink } from 'lucide-react';
 import { Recipe, RecipeCategory, MealPlanDay, OptimizedSchedule } from './types';
 import { fetchAllRecipes } from './services/recipeService';
 import { optimizeCookingOps, suggestMealPlan } from './services/geminiService';
@@ -35,18 +35,19 @@ const App: React.FC = () => {
 
   const addLog = (msg: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setSystemLogs(prev => [`[${timestamp}] ${msg}`, ...prev].slice(0, 10));
+    setSystemLogs(prev => [`[${timestamp}] ${msg}`, ...prev].slice(0, 15));
   };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      addLog("Fetching recipes from database...");
+      addLog("Connecting to Database...");
       const result = await fetchAllRecipes();
       setRecipes(result.data);
-      addLog(`Success: Loaded ${result.data.length} recipes.`);
+      addLog(`Success: ${result.data.length} recipes loaded.`);
+      if (result.error) addLog(`Notice: ${result.error}`);
     } catch (e: any) {
-      addLog(`Error: Database fetch failed - ${e.message}`);
+      addLog(`Error: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -84,39 +85,53 @@ const App: React.FC = () => {
     setOptimizedResult(null);
   };
 
-  const handleApiKeyPrompt = async () => {
-    if ((window as any).aistudio?.openSelectKey) {
-      addLog("Prompting user for Gemini API Key...");
-      await (window as any).aistudio.openSelectKey();
+  /**
+   * Checks for API key and prompts user if missing.
+   * Follows the 'proceed after prompt' race-condition rule.
+   */
+  const ensureApiKey = async (): Promise<boolean> => {
+    // If environment variable is already set, we're good
+    if (process.env.API_KEY && process.env.API_KEY !== "") return true;
+
+    const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
+    if (!hasKey) {
+      addLog("Missing API Key. Prompting user selection...");
+      if ((window as any).aistudio?.openSelectKey) {
+        await (window as any).aistudio.openSelectKey();
+        // Mandatory: Assume success after triggering the dialog to avoid race conditions
+        return true;
+      } else {
+        addLog("Critical: Key selection dialog not available in this environment.");
+        return false;
+      }
     }
+    return true;
   };
 
   const checkAndRunOptimizer = async () => {
     if (opsSelection.length === 0) return;
     setOpsError(null);
+    
+    const keyReady = await ensureApiKey();
+    if (!keyReady) {
+      setOpsError("Gemini requires an API key. Check the System Console for more info.");
+      return;
+    }
+
     setOpsLoading(true);
-    addLog("Optimizing plan with Gemini 3 Pro...");
+    addLog("Requesting optimization from Gemini 3 Pro...");
 
     try {
-      // Check if we have an API key context
-      const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
-      if (!hasKey && !process.env.API_KEY) {
-        setOpsError("Gemini requires a valid API key. Please check the System Console to connect.");
-        addLog("Error: Missing API Key.");
-        setOpsLoading(false);
-        return;
-      }
-
       const result = await optimizeCookingOps(opsSelection, cookCount, stoveCount);
       setOptimizedResult(result);
-      addLog("Success: Cooking plan generated.");
+      addLog("Plan received successfully.");
       
       setTimeout(() => {
         document.getElementById('ops-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     } catch (e: any) {
       addLog(`Error: ${e.message}`);
-      setOpsError(e.message || "Failed to connect to the cooking brain.");
+      setOpsError(e.message || "Failed to calculate the plan.");
     } finally {
       setOpsLoading(false);
     }
@@ -124,8 +139,15 @@ const App: React.FC = () => {
 
   const generatePlan = async () => {
     setPlannerError(null);
+    
+    const keyReady = await ensureApiKey();
+    if (!keyReady) {
+      setPlannerError("Gemini requires an API key to suggest recipes.");
+      return;
+    }
+
     setPlannerLoading(true);
-    addLog("Generating meal suggestions with Gemini 3 Flash...");
+    addLog("Requesting meal suggestions from Gemini 3 Flash...");
     
     try {
       const suggestedNames = await suggestMealPlan(recipes, fridgeVeggies, plannerDays);
@@ -142,7 +164,7 @@ const App: React.FC = () => {
         });
       }
       setMealPlan(newPlan);
-      addLog("Success: Weekly plan suggested.");
+      addLog("Weekly plan suggestions loaded.");
     } catch (e: any) {
       addLog(`Error: ${e.message}`);
       setPlannerError(e.message || "Could not generate suggestions.");
@@ -175,7 +197,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-4">
           <Utensils className="animate-bounce text-orange-500" size={48} />
-          <p className="text-slate-400 font-medium animate-pulse">Opening Kitchen...</p>
+          <p className="text-slate-400 font-medium animate-pulse">Setting up the kitchen...</p>
         </div>
       </div>
     );
@@ -203,19 +225,23 @@ const App: React.FC = () => {
         <div className="mb-6 p-4 bg-slate-900 text-green-400 font-mono text-[11px] rounded-2xl overflow-hidden shadow-xl border border-slate-800 animate-in zoom-in-95">
            <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
             <span className="flex items-center gap-2 uppercase tracking-widest"><Terminal size={12}/> System Console</span>
-            <button onClick={handleApiKeyPrompt} className="bg-orange-600 text-white px-2 py-0.5 rounded flex items-center gap-1 hover:bg-orange-500">
-              <Key size={10} /> Link API Key
+            <button onClick={() => (window as any).aistudio?.openSelectKey?.()} className="bg-orange-600 text-white px-3 py-1 rounded-lg flex items-center gap-2 hover:bg-orange-500 text-[10px] font-bold">
+              <Key size={12} /> Link Paid Key
             </button>
            </div>
            <div className="space-y-1 mb-4">
-             <p><span className="text-slate-500">USER:</span> {auth.currentUser?.uid || 'ANON'}</p>
-             <p><span className="text-slate-500">API:</span> {process.env.API_KEY ? 'ACTIVE (EnvVar)' : 'KEY_MISSING'}</p>
-             <p><span className="text-slate-500">RECIPES:</span> {recipes.length} Loaded</p>
+             <p><span className="text-slate-500">PROJECT:</span> cooking-ops</p>
+             <p><span className="text-slate-500">API_KEY:</span> {process.env.API_KEY ? 'ACTIVE' : 'NOT_FOUND'}</p>
+             <p><span className="text-slate-500">MODELS:</span> Gemini 3 Pro/Flash</p>
+             <p className="flex items-center gap-2 text-slate-400 italic mt-2">
+               <Info size={12}/> Paid keys required for Pro models. 
+               <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline flex items-center gap-1">Docs <ExternalLink size={10}/></a>
+             </p>
            </div>
-           <div className="bg-black/50 p-2 rounded max-h-32 overflow-y-auto">
-             <p className="text-slate-600 mb-1 font-bold">EVENT_LOG:</p>
-             {systemLogs.map((log, i) => <p key={i} className="leading-tight mb-1">{log}</p>)}
-             {systemLogs.length === 0 && <p className="text-slate-800">No logs yet...</p>}
+           <div className="bg-black/50 p-3 rounded-xl max-h-40 overflow-y-auto">
+             <p className="text-slate-600 mb-2 font-bold text-[9px] uppercase tracking-widest">Execution Log:</p>
+             {systemLogs.map((log, i) => <p key={i} className="leading-relaxed mb-1 font-medium">{log}</p>)}
+             {systemLogs.length === 0 && <p className="text-slate-800">Listening for signals...</p>}
            </div>
         </div>
       )}
@@ -229,17 +255,17 @@ const App: React.FC = () => {
               <div className="space-y-2">
                 <span className="text-xs text-slate-400 font-medium">How many cooks?</span>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setCookCount(Math.max(1, cookCount - 1))} className="w-8 h-8 rounded-full border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:bg-slate-100"><Minus size={14} /></button>
-                  <span className="text-lg font-bold w-4 text-center">{cookCount}</span>
-                  <button onClick={() => setCookCount(Math.min(4, cookCount + 1))} className="w-8 h-8 rounded-full border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:bg-slate-100"><Plus size={14} /></button>
+                  <button onClick={() => setCookCount(Math.max(1, cookCount - 1))} className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:scale-95"><Minus size={16} /></button>
+                  <span className="text-xl font-bold w-4 text-center">{cookCount}</span>
+                  <button onClick={() => setCookCount(Math.min(4, cookCount + 1))} className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:scale-95"><Plus size={16} /></button>
                 </div>
               </div>
               <div className="space-y-2">
                 <span className="text-xs text-slate-400 font-medium">Stove Burners</span>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setStoveCount(Math.max(1, stoveCount - 1))} className="w-8 h-8 rounded-full border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:bg-slate-100"><Minus size={14} /></button>
-                  <span className="text-lg font-bold w-4 text-center">{stoveCount}</span>
-                  <button onClick={() => setStoveCount(Math.min(6, stoveCount + 1))} className="w-8 h-8 rounded-full border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:bg-slate-100"><Plus size={14} /></button>
+                  <button onClick={() => setStoveCount(Math.max(1, stoveCount - 1))} className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:scale-95"><Minus size={16} /></button>
+                  <span className="text-xl font-bold w-4 text-center">{stoveCount}</span>
+                  <button onClick={() => setStoveCount(Math.min(6, stoveCount + 1))} className="w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-600 active:scale-95"><Plus size={16} /></button>
                 </div>
               </div>
             </div>
@@ -250,8 +276,8 @@ const App: React.FC = () => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                 <input 
                   type="text" 
-                  placeholder="Find a dish..." 
-                  className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-orange-500 transition-all font-medium"
+                  placeholder="Type dish name..." 
+                  className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-orange-500 transition-all font-medium text-lg"
                   value={searchQuery}
                   onFocus={() => setShowDropdown(true)}
                   onChange={(e) => {setSearchQuery(e.target.value); setShowDropdown(true);}}
@@ -259,15 +285,15 @@ const App: React.FC = () => {
               </div>
 
               {showDropdown && filteredSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
                   {filteredSuggestions.map(r => (
                     <button 
                       key={r.id} 
                       onClick={() => addRecipe(r)}
-                      className="w-full px-5 py-4 text-left hover:bg-slate-50 flex justify-between items-center transition-colors"
+                      className="w-full px-5 py-5 text-left hover:bg-slate-50 flex justify-between items-center border-b border-slate-50 last:border-0"
                     >
-                      <span className="font-semibold text-slate-700">{r.dishName}</span>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">{r.category}</span>
+                      <span className="font-bold text-slate-700">{r.dishName}</span>
+                      <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded font-black uppercase tracking-widest">{r.category}</span>
                     </button>
                   ))}
                 </div>
@@ -277,28 +303,28 @@ const App: React.FC = () => {
             {opsSelection.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-4">
                 {opsSelection.map(r => (
-                  <div key={r.id} className="flex items-center gap-2 bg-orange-50 border border-orange-100 text-orange-700 pl-3 pr-1 py-1 rounded-full text-xs font-bold animate-in zoom-in-50">
+                  <div key={r.id} className="flex items-center gap-2 bg-orange-50 border border-orange-100 text-orange-700 pl-3 pr-1 py-1.5 rounded-full text-xs font-bold shadow-sm">
                     {r.dishName}
-                    <button onClick={() => removeRecipe(r.id)} className="p-1 hover:bg-orange-100 rounded-full"><X size={14} /></button>
+                    <button onClick={() => removeRecipe(r.id)} className="p-1 hover:bg-orange-200 rounded-full transition-colors"><X size={14} /></button>
                   </div>
                 ))}
               </div>
             )}
 
             {opsError && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-xl flex gap-3 items-start animate-in shake-in">
-                <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-700 font-medium leading-relaxed">{opsError}</p>
+              <div className="mt-4 p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 items-start animate-in shake-in">
+                <AlertCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 font-semibold leading-relaxed">{opsError}</p>
               </div>
             )}
 
             <button 
               onClick={checkAndRunOptimizer}
               disabled={opsSelection.length === 0 || opsLoading}
-              className="w-full mt-6 py-4 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 disabled:text-slate-300 text-white font-bold rounded-2xl transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 text-lg active:scale-95"
+              className="w-full mt-6 py-5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 disabled:text-slate-300 text-white font-bold rounded-2xl transition-all shadow-xl shadow-orange-500/20 flex items-center justify-center gap-3 text-lg active:scale-95"
             >
-              {opsLoading ? <RefreshCcw className="animate-spin" size={20} /> : <Flame size={20} />}
-              {opsLoading ? 'Optimizing Steps...' : 'Plan My Cooking'}
+              {opsLoading ? <RefreshCcw className="animate-spin" size={24} /> : <Flame size={24} />}
+              {opsLoading ? 'Compiling Brain...' : 'Plan My Cooking'}
             </button>
           </div>
 
@@ -306,27 +332,27 @@ const App: React.FC = () => {
             <div id="ops-results" className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex justify-between items-center px-2">
                 <h3 className="font-bold text-slate-900">Your Step-by-Step</h3>
-                <span className="text-[10px] bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-black uppercase tracking-wider">{optimizedResult.totalDuration} Min Total</span>
+                <span className="text-[10px] bg-slate-900 text-white px-3 py-1 rounded-lg font-black uppercase tracking-wider">{optimizedResult.totalDuration} Min Total</span>
               </div>
               
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {optimizedResult.timeline.map((step, i) => (
                   <div key={i} className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 border-2 transition-all ${step.isParallel ? 'bg-orange-500 text-white border-orange-400 shadow-md' : 'bg-white text-slate-300 border-slate-100'}`}>
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 border-2 transition-all ${step.isParallel ? 'bg-orange-500 text-white border-orange-400 shadow-lg shadow-orange-500/20' : 'bg-white text-slate-300 border-slate-100'}`}>
                         {step.timeOffset}'
                       </div>
-                      {i !== optimizedResult.timeline.length - 1 && <div className="w-0.5 h-full bg-slate-100 my-1"></div>}
+                      {i !== optimizedResult.timeline.length - 1 && <div className="w-0.5 h-full bg-slate-200 my-2"></div>}
                     </div>
-                    <div className="bg-white p-4 rounded-2xl border border-slate-100 flex-1 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="bg-white p-5 rounded-3xl border border-slate-100 flex-1 shadow-sm">
                       <div className="flex justify-between items-start mb-2">
-                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Assignee: {step.assignees.join(' & ')}</span>
-                         {step.isParallel && <span className="text-[8px] font-black text-green-500 bg-green-50 px-2 py-0.5 rounded border border-green-100 uppercase tracking-tighter">Multi-Task</span>}
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cook(s): {step.assignees.join(' & ')}</span>
+                         {step.isParallel && <span className="text-[8px] font-black text-green-600 bg-green-50 px-2 py-0.5 rounded-lg border border-green-100 uppercase tracking-tighter">Multi-Task</span>}
                       </div>
-                      <p className="text-sm font-bold text-slate-800 leading-snug">{step.action}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <p className="text-sm font-bold text-slate-800 leading-relaxed">{step.action}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
                         {step.involvedRecipes.map((r, ri) => (
-                          <span key={ri} className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{r}</span>
+                          <span key={ri} className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em]">{r}</span>
                         ))}
                       </div>
                     </div>
@@ -347,7 +373,7 @@ const App: React.FC = () => {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Plan For...</span>
-                <span className="text-orange-500 font-black text-lg uppercase tracking-tighter">{plannerDays} Days</span>
+                <span className="text-orange-500 font-black text-lg">{plannerDays} Days</span>
               </div>
               <input 
                 type="range" min="1" max="7" 
@@ -358,44 +384,48 @@ const App: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">In the Fridge?</span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Inventory Constraints?</span>
               <textarea 
-                placeholder="e.g. Leftover chicken, carrots, broccoli..." 
-                className="w-full p-4 bg-slate-50 border-none rounded-2xl h-24 focus:ring-2 focus:ring-orange-500 transition-all text-sm font-medium resize-none"
+                placeholder="e.g. Have leftover rice, carrots, kale..." 
+                className="w-full p-5 bg-slate-50 border-none rounded-2xl h-28 focus:ring-2 focus:ring-orange-500 transition-all text-sm font-medium resize-none"
                 value={fridgeVeggies}
                 onChange={(e) => setFridgeVeggies(e.target.value)}
               />
             </div>
 
             {plannerError && (
-              <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex gap-3 items-start">
-                <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-red-700 font-medium leading-relaxed">{plannerError}</p>
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 items-start animate-in shake-in">
+                <AlertCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 font-semibold leading-relaxed">{plannerError}</p>
               </div>
             )}
 
             <button 
               onClick={generatePlan}
               disabled={plannerLoading || recipes.length === 0}
-              className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"
+              className="w-full py-5 bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all text-lg"
             >
-              {plannerLoading ? <RefreshCcw className="animate-spin" size={20} /> : <Calendar size={20} />}
-              {plannerLoading ? 'Thinking...' : 'Suggest a Menu'}
+              {plannerLoading ? <RefreshCcw className="animate-spin" size={24} /> : <Calendar size={24} />}
+              {plannerLoading ? 'Dreaming up meals...' : 'Suggest a Menu'}
             </button>
           </div>
 
           {mealPlan.length > 0 && (
             <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
               {mealPlan.map((day, idx) => (
-                <div key={idx} className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                  <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Day {idx + 1}</span>
+                <div key={idx} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm">
+                  <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Segment {idx + 1}</span>
+                    <span className="text-[9px] font-black text-orange-500 uppercase">{day.date}</span>
                   </div>
                   <div className="divide-y divide-slate-50">
-                    {['breakfast', 'lunchDinner', 'snack'].map((m) => (
-                      <div key={m} className="p-4">
-                        <span className="text-[10px] text-orange-500 font-black uppercase block mb-1">{m === 'lunchDinner' ? 'Main' : m}</span>
-                        <p className="font-bold text-slate-800">{day[m as keyof MealPlanDay] ? (day[m as keyof MealPlanDay] as Recipe).dishName : 'Reserve Slot'}</p>
+                    {(['breakfast', 'lunchDinner', 'snack'] as const).map((m) => (
+                      <div key={m} className="p-5 flex justify-between items-center group hover:bg-slate-50 transition-colors">
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-black uppercase block mb-1 tracking-tighter">{m === 'lunchDinner' ? 'Main Course' : m}</span>
+                          <p className="font-bold text-slate-800 text-lg tracking-tight">{day[m]?.dishName || 'Custom Slot'}</p>
+                        </div>
+                        <Utensils size={16} className="text-slate-100 group-hover:text-orange-200 transition-colors" />
                       </div>
                     ))}
                   </div>
@@ -404,9 +434,9 @@ const App: React.FC = () => {
               
               <button 
                 onClick={generateShoppingList}
-                className="w-full py-5 bg-orange-500 text-white font-black rounded-2xl shadow-lg mt-4 flex items-center justify-center gap-2 active:scale-95"
+                className="w-full py-6 bg-orange-500 text-white font-black rounded-3xl shadow-2xl mt-6 flex items-center justify-center gap-3 active:scale-95"
               >
-                <ShoppingCart size={20} /> Build Grocery List
+                <ShoppingCart size={24} /> Generate Grocery Report
               </button>
             </div>
           )}
@@ -418,8 +448,8 @@ const App: React.FC = () => {
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold text-slate-900">Grocery List</h2>
-              <button onClick={() => setShoppingList(prev => prev.filter(i => !i.checked))} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">Grocery List</h2>
+              <button onClick={() => setShoppingList(prev => prev.filter(i => !i.checked))} className="text-slate-300 hover:text-red-500 transition-colors p-2"><Trash2 size={20}/></button>
             </div>
 
             <div className="space-y-2">
@@ -431,21 +461,23 @@ const App: React.FC = () => {
                     newList[i].checked = !newList[i].checked;
                     setShoppingList(newList);
                   }}
-                  className="flex items-center justify-between p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+                  className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent hover:border-slate-200"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${item.checked ? 'bg-green-500 border-green-500' : 'bg-white border-slate-200'}`}>
-                      {item.checked && <Check size={14} className="text-white" strokeWidth={4} />}
+                  <div className="flex items-center gap-4">
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${item.checked ? 'bg-green-500 border-green-500' : 'bg-white border-slate-200'}`}>
+                      {item.checked && <Check size={16} className="text-white" strokeWidth={5} />}
                     </div>
-                    <span className={`text-sm font-semibold ${item.checked ? 'text-slate-300 line-through' : 'text-slate-800'}`}>{item.name}</span>
+                    <span className={`text-base font-bold tracking-tight ${item.checked ? 'text-slate-300 line-through' : 'text-slate-800'}`}>{item.name}</span>
                   </div>
-                  <span className="text-[10px] font-black bg-white px-2 py-1 rounded-lg border border-slate-100 text-slate-500">{item.value} {item.unit}</span>
+                  <span className="text-[11px] font-black bg-white px-3 py-1.5 rounded-xl border border-slate-100 text-slate-500 shadow-sm">{item.value} {item.unit}</span>
                 </div>
               ))}
               {shoppingList.length === 0 && (
-                <div className="text-center py-20 text-slate-300 text-sm font-medium flex flex-col items-center gap-3">
-                  <ShoppingCart size={40} className="opacity-20" />
-                  Your list is empty.
+                <div className="text-center py-24 text-slate-300 text-sm font-medium flex flex-col items-center gap-4">
+                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
+                    <ShoppingCart size={40} className="opacity-10" />
+                  </div>
+                  <p className="uppercase tracking-widest text-[10px] font-black">Supply chain empty</p>
                 </div>
               )}
             </div>
@@ -454,7 +486,7 @@ const App: React.FC = () => {
       )}
 
       {/* STICKY NAV */}
-      <nav className="fixed bottom-6 left-4 right-4 bg-slate-900/95 backdrop-blur-xl py-4 px-8 flex justify-between items-center z-50 shadow-2xl rounded-3xl border border-white/10">
+      <nav className="fixed bottom-6 left-4 right-4 bg-slate-900/95 backdrop-blur-xl py-5 px-10 flex justify-between items-center z-50 shadow-2xl rounded-[2.5rem] border border-white/10">
         {[
           { id: 'ops', icon: Flame, label: 'Cook' },
           { id: 'planner', icon: Calendar, label: 'Plan' },
@@ -463,10 +495,10 @@ const App: React.FC = () => {
           <button 
             key={btn.id}
             onClick={() => setActiveTab(btn.id as any)} 
-            className={`flex flex-col items-center gap-1 transition-all ${activeTab === btn.id ? 'text-orange-500 scale-110' : 'text-slate-500 hover:text-slate-300'}`}
+            className={`flex flex-col items-center gap-1.5 transition-all duration-300 ${activeTab === btn.id ? 'text-orange-500 scale-110' : 'text-slate-500 hover:text-slate-300'}`}
           >
-            <btn.icon size={22} strokeWidth={activeTab === btn.id ? 2.5 : 2} />
-            <span className="text-[8px] font-black uppercase tracking-widest">{btn.label}</span>
+            <btn.icon size={26} strokeWidth={activeTab === btn.id ? 2.5 : 2} />
+            <span className="text-[9px] font-black uppercase tracking-[0.2em]">{btn.label}</span>
           </button>
         ))}
       </nav>

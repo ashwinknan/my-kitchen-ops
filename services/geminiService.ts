@@ -6,7 +6,6 @@ import { Recipe, OptimizedSchedule } from "../types";
  */
 const extractJson = (text: string) => {
   try {
-    // Attempt to find content between the first { and last }
     const match = text.match(/\{[\s\S]*\}/);
     if (match) return match[0];
     return text;
@@ -16,17 +15,15 @@ const extractJson = (text: string) => {
 };
 
 /**
- * Optimizes cooking operations using Gemini 3 Pro for complex resource interleaving.
+ * Optimizes cooking operations using Gemini 3 Pro.
  */
 export const optimizeCookingOps = async (
   recipes: Recipe[], 
   cooks: number, 
   stoves: number
 ): Promise<OptimizedSchedule> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY is missing. Please set it in environment variables.");
-
-  const ai = new GoogleGenAI({ apiKey });
+  // Use a fresh instance to pick up the latest process.env.API_KEY
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
     You are a professional chef. I need to cook ${recipes.length} dishes with ${cooks} people and ${stoves} stove burners.
@@ -84,22 +81,23 @@ export const optimizeCookingOps = async (
     return JSON.parse(jsonStr) as OptimizedSchedule;
   } catch (error: any) {
     console.error("Gemini Error:", error);
+    // If the error suggests entity not found, it often means the API key is invalid or project not linked
+    if (error.message?.includes("Requested entity was not found")) {
+      throw new Error("API Key configuration error. Please re-link your API Key in the System Console.");
+    }
     throw new Error(error.message || "Failed to generate cooking plan.");
   }
 };
 
 /**
- * Suggests a meal plan based on inventory constraints using Gemini 3 Flash for efficiency.
+ * Suggests a meal plan using Gemini 3 Flash.
  */
 export const suggestMealPlan = async (
     allRecipes: Recipe[],
     fridgeVeggies: string,
     days: number
   ): Promise<string[]> => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("API_KEY is missing.");
-
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
       Recipes: ${allRecipes.map(r => `${r.dishName} (${r.category})`).join(', ')}
