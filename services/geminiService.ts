@@ -1,23 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe, OptimizedSchedule } from "../types";
-
-/**
- * Helper to safely get the API Key across different environments
- */
-const getApiKey = () => {
-  // Try standard process.env (injected by some platforms)
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    return process.env.API_KEY;
-  }
-  // Try Vite's environment variable format if the user switched to Vite build
-  // @ts-ignore
-  if (import.meta.env && import.meta.env.VITE_API_KEY) {
-    // @ts-ignore
-    return import.meta.env.VITE_API_KEY;
-  }
-  return '';
-};
 
 /**
  * Optimizes cooking operations using Gemini 3 Pro for complex resource interleaving.
@@ -27,8 +9,8 @@ export const optimizeCookingOps = async (
   cooks: number, 
   stoves: number
 ): Promise<OptimizedSchedule> => {
-  const apiKey = getApiKey();
-  const ai = new GoogleGenAI({ apiKey });
+  // Always initialize with the named parameter apiKey and use the process.env.API_KEY directly
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
     You are a professional kitchen operations consultant. 
@@ -79,20 +61,20 @@ export const optimizeCookingOps = async (
     }
   });
 
+  // Extract text directly from the response object
   const jsonStr = response.text?.trim() || "{}";
   return JSON.parse(jsonStr) as OptimizedSchedule;
 };
 
 /**
- * Suggests a meal plan based on inventory constraints.
+ * Suggests a meal plan based on inventory constraints using Gemini 3 Pro.
  */
 export const suggestMealPlan = async (
     allRecipes: Recipe[],
     fridgeVeggies: string,
     days: number
   ): Promise<string[]> => {
-    const apiKey = getApiKey();
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
       Database Recipes:
