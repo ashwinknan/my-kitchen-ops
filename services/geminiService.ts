@@ -2,6 +2,20 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe, OptimizedSchedule } from "../types";
 
 /**
+ * Helper to robustly extract JSON from a model response string.
+ */
+const extractJson = (text: string) => {
+  try {
+    // Attempt to find content between the first { and last }
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return match[0];
+    return text;
+  } catch (e) {
+    return text;
+  }
+};
+
+/**
  * Optimizes cooking operations using Gemini 3 Pro for complex resource interleaving.
  */
 export const optimizeCookingOps = async (
@@ -9,7 +23,10 @@ export const optimizeCookingOps = async (
   cooks: number, 
   stoves: number
 ): Promise<OptimizedSchedule> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY is missing. Please set it in environment variables.");
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     You are a professional chef. I need to cook ${recipes.length} dishes with ${cooks} people and ${stoves} stove burners.
@@ -24,7 +41,7 @@ export const optimizeCookingOps = async (
     - Max ${stoves} stove burners at any time.
     - Return a logical timeline where 'timeOffset' is the start minute.
     
-    Return exactly this JSON structure:
+    Return EXACTLY this JSON structure:
     {
       "timeline": [{"timeOffset": number, "action": string, "involvedRecipes": string[], "assignees": number[], "isParallel": boolean}],
       "totalDuration": number,
@@ -32,39 +49,43 @@ export const optimizeCookingOps = async (
     }
   `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          timeline: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                timeOffset: { type: Type.NUMBER },
-                action: { type: Type.STRING },
-                involvedRecipes: { type: Type.ARRAY, items: { type: Type.STRING } },
-                assignees: { type: Type.ARRAY, items: { type: Type.NUMBER } },
-                resourceUsed: { type: Type.STRING },
-                isParallel: { type: Type.BOOLEAN }
-              },
-              required: ["timeOffset", "action", "involvedRecipes", "assignees", "isParallel"]
-            }
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            timeline: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  timeOffset: { type: Type.NUMBER },
+                  action: { type: Type.STRING },
+                  involvedRecipes: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  assignees: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+                  isParallel: { type: Type.BOOLEAN }
+                },
+                required: ["timeOffset", "action", "involvedRecipes", "assignees", "isParallel"]
+              }
+            },
+            totalDuration: { type: Type.NUMBER },
+            criticalWarnings: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
-          totalDuration: { type: Type.NUMBER },
-          criticalWarnings: { type: Type.ARRAY, items: { type: Type.STRING } }
-        },
-        required: ["timeline", "totalDuration", "criticalWarnings"]
+          required: ["timeline", "totalDuration", "criticalWarnings"]
+        }
       }
-    }
-  });
+    });
 
-  const jsonStr = response.text?.trim() || "{}";
-  return JSON.parse(jsonStr) as OptimizedSchedule;
+    const jsonStr = extractJson(response.text || "{}");
+    return JSON.parse(jsonStr) as OptimizedSchedule;
+  } catch (error: any) {
+    console.error("Gemini Error:", error);
+    throw new Error(error.message || "Failed to generate cooking plan.");
+  }
 };
 
 /**
@@ -75,7 +96,10 @@ export const suggestMealPlan = async (
     fridgeVeggies: string,
     days: number
   ): Promise<string[]> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) throw new Error("API_KEY is missing.");
+
+    const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `
       Recipes: ${allRecipes.map(r => `${r.dishName} (${r.category})`).join(', ')}
@@ -86,11 +110,16 @@ export const suggestMealPlan = async (
       Return names only, separated by commas.
     `;
   
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt
-    });
-  
-    const text = response.text || "";
-    return text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt
+      });
+    
+      const text = response.text || "";
+      return text.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    } catch (error: any) {
+      console.error("Gemini Error:", error);
+      throw new Error(error.message || "Failed to suggest recipes.");
+    }
   };
