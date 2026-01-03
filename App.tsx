@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Utensils, Calendar, ShoppingCart, Settings2, Flame, RefreshCcw, Check, Trash2, Plus, ChevronDown, ChevronUp, Database, WifiOff, AlertCircle, Terminal, ExternalLink, Activity, ShieldAlert } from 'lucide-react';
 import { Recipe, RecipeCategory, MealPlanDay, OptimizedSchedule } from './types';
 import { fetchAllRecipes } from './services/recipeService';
 import { RecipeCard } from './components/RecipeCard';
 import { optimizeCookingOps, suggestMealPlan } from './services/geminiService';
-import { auth, USER_UID, getAuthError, RECIPES_COLLECTION } from './firebase';
+import { auth, getAuthError, RECIPES_COLLECTION } from './firebase';
 
 const App: React.FC = () => {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -163,7 +162,6 @@ const App: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto pb-32 px-4 pt-6 min-h-screen">
-      {/* VERCEL DEPLOYMENT MONITOR */}
       <div className="mb-6 flex flex-col gap-2">
         <div className="flex items-center justify-between px-5 py-4 bg-slate-900 rounded-[1.5rem] border border-slate-800 shadow-2xl overflow-hidden relative">
           <div className="absolute top-0 right-0 p-1 bg-orange-500 text-white text-[8px] font-black px-2 rounded-bl-lg uppercase">Vercel Build</div>
@@ -199,7 +197,7 @@ const App: React.FC = () => {
               <p><span className="text-slate-500 font-bold">AUTH_STATUS:</span> {getAuthError() || (auth.currentUser ? 'AUTHENTICATED' : 'ANONYMOUS_DISABLED')}</p>
               <p><span className="text-slate-500 font-bold">AUTH_UID:</span> {auth.currentUser?.uid || 'NULL'}</p>
               <p><span className="text-slate-500 font-bold">COLLECTION:</span> {RECIPES_COLLECTION}</p>
-              <p><span className="text-slate-500 font-bold">QUERY_FILTER:</span> ownerId == "{USER_UID}"</p>
+              <p><span className="text-slate-500 font-bold">QUERY_FILTER:</span> ownerId == "{auth.currentUser?.uid || '??'}"</p>
               <p><span className="text-slate-500 font-bold">RECORDS_FETCHED:</span> {recipes.length}</p>
             </div>
             
@@ -315,7 +313,7 @@ const App: React.FC = () => {
                       <p className="text-slate-900 font-black text-2xl uppercase tracking-tighter">Inventory Empty</p>
                       <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium px-10">
                         {isLive && recipes.length === 0 
-                          ? `Verification Status: Live connection established, but zero records found for ownerId "${USER_UID}".`
+                          ? `Verification Status: Live connection established, but zero records found for ownerId "${auth.currentUser?.uid || '??'}".`
                           : "Your current search filters returned zero results from the library."}
                       </p>
                     </div>

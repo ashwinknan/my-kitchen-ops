@@ -1,4 +1,3 @@
-
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
@@ -37,4 +36,3 @@ export const authReady = new Promise<User | null>((resolve) => {
 
 export const getAuthError = () => authError;
 export const RECIPES_COLLECTION = 'recipes';
-export const USER_UID = 'kg6Lv5lXacPqbWsjZAYr0WrEx0e2';
