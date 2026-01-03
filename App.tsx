@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Utensils, Calendar, ShoppingCart, Settings2, Flame, RefreshCcw, Check, Trash2, Plus, ChevronDown, ChevronUp, Database, WifiOff, AlertCircle, Terminal, ExternalLink, Activity } from 'lucide-react';
+import { Search, Utensils, Calendar, ShoppingCart, Settings2, Flame, RefreshCcw, Check, Trash2, Plus, ChevronDown, ChevronUp, Database, WifiOff, AlertCircle, Terminal, ExternalLink, Activity, ShieldAlert } from 'lucide-react';
 import { Recipe, RecipeCategory, MealPlanDay, OptimizedSchedule } from './types';
 import { fetchAllRecipes } from './services/recipeService';
 import { RecipeCard } from './components/RecipeCard';
 import { optimizeCookingOps, suggestMealPlan } from './services/geminiService';
-import { auth, USER_UID } from './firebase';
+// Fix: Added missing RECIPES_COLLECTION import
+import { auth, USER_UID, getAuthError, RECIPES_COLLECTION } from './firebase';
 
 const App: React.FC = () => {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -17,7 +18,7 @@ const App: React.FC = () => {
   const [connError, setConnError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
-  // Unified Ops Dashboard State
+  // Ops State
   const [opsSelection, setOpsSelection] = useState<Recipe[]>([]);
   const [cookCount, setCookCount] = useState(2);
   const [stoveCount, setStoveCount] = useState(4);
@@ -25,7 +26,7 @@ const App: React.FC = () => {
   const [opsLoading, setOpsLoading] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
-  // Meal Planner State
+  // Planner State
   const [plannerDays, setPlannerDays] = useState(7);
   const [mealPlan, setMealPlan] = useState<MealPlanDay[]>([]);
   const [fridgeVeggies, setFridgeVeggies] = useState('');
@@ -42,7 +43,14 @@ const App: React.FC = () => {
       const result = await fetchAllRecipes();
       setRecipes(result.data);
       setIsLive(result.isLive);
-      if (result.error) setConnError(result.error);
+      
+      const authErr = getAuthError();
+      if (authErr === 'auth/admin-restricted-operation') {
+        setConnError("Anonymous Auth is DISABLED in Firebase. Please enable it in the console.");
+        setShowDebug(true);
+      } else if (result.error) {
+        setConnError(result.error);
+      }
     } catch (e: any) {
       setConnError(e.message || "Unknown fetching error");
     } finally {
@@ -147,7 +155,7 @@ const App: React.FC = () => {
           </div>
           <div>
             <p className="text-slate-900 font-black text-2xl uppercase tracking-[0.2em]">KitchenOps Pro</p>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Verifying production deployment...</p>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Booting System Components...</p>
           </div>
         </div>
       </div>
@@ -159,14 +167,14 @@ const App: React.FC = () => {
       {/* VERCEL DEPLOYMENT MONITOR */}
       <div className="mb-6 flex flex-col gap-2">
         <div className="flex items-center justify-between px-5 py-4 bg-slate-900 rounded-[1.5rem] border border-slate-800 shadow-2xl overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-1 bg-orange-500 text-white text-[8px] font-black px-2 rounded-bl-lg uppercase">Production</div>
+          <div className="absolute top-0 right-0 p-1 bg-orange-500 text-white text-[8px] font-black px-2 rounded-bl-lg uppercase">Vercel Build</div>
           <div className="flex items-center gap-5">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${isLive && recipes.length > 0 ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`}>
               {isLive ? <Activity size={12} className="animate-pulse" /> : <WifiOff size={12} />}
-              {isLive && recipes.length > 0 ? 'LIVE CONNECTION' : 'SYNCING DATABASE...'}
+              {isLive && recipes.length > 0 ? 'LIVE' : 'PENDING'}
             </div>
             {connError && (
-              <div className="text-[10px] text-orange-400 font-black flex items-center gap-1.5 max-w-[200px] md:max-w-md truncate">
+              <div className="text-[10px] text-orange-400 font-black flex items-center gap-2 max-w-[200px] md:max-w-md truncate">
                 <AlertCircle size={14} className="shrink-0" /> {connError}
               </div>
             )}
@@ -175,29 +183,51 @@ const App: React.FC = () => {
             onClick={() => setShowDebug(!showDebug)} 
             className="text-[10px] font-black text-slate-400 hover:text-white uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-white/5 px-3 py-2 rounded-xl"
           >
-            <Terminal size={14} /> System Health
+            <Terminal size={14} /> {showDebug ? 'Hide Console' : 'System Console'}
           </button>
         </div>
 
         {showDebug && (
           <div className="p-8 bg-black text-green-400 font-mono text-[12px] rounded-[2rem] shadow-2xl border border-slate-800 animate-in slide-in-from-top-4 duration-500">
             <div className="flex justify-between items-start mb-6 border-b border-green-900/30 pb-4">
-              <p className="text-green-600 font-black uppercase tracking-[0.2em]"># SYSTEM_DIAGNOSTICS_v1.0</p>
+              <p className="text-green-600 font-black uppercase tracking-[0.2em]"># ROOT@KITCHEN_OPS: ~ Diagnostics</p>
               <button onClick={loadData} className="text-green-400 hover:text-white flex items-center gap-2 bg-green-900/20 px-4 py-2 rounded-lg border border-green-900/50">
-                <RefreshCcw size={14} /> [RE-SYNC_CMS]
+                <RefreshCcw size={14} /> [RUN_RETRY]
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
-              <p><span className="text-slate-500 font-bold">PROJECT_TARGET:</span> cooking-ops</p>
-              <p><span className="text-slate-500 font-bold">AUTH_UID:</span> {auth.currentUser?.uid || 'INIT_PENDING'}</p>
-              <p><span className="text-slate-500 font-bold">CMS_OWNER:</span> {USER_UID}</p>
-              <p><span className="text-slate-500 font-bold">ENTITIES_LOADED:</span> {recipes.length}</p>
-              <p><span className="text-slate-500 font-bold">GEMINI_ENGINE:</span> gemini-3-flash-preview</p>
-              <p><span className="text-slate-500 font-bold">CORS_STATUS:</span> OK_WHITELISTED</p>
+              <p><span className="text-slate-500 font-bold">FIREBASE_PROJECT:</span> cooking-ops</p>
+              <p><span className="text-slate-500 font-bold">AUTH_STATUS:</span> {getAuthError() || (auth.currentUser ? 'AUTHENTICATED' : 'ANONYMOUS_DISABLED')}</p>
+              <p><span className="text-slate-500 font-bold">AUTH_UID:</span> {auth.currentUser?.uid || 'NULL'}</p>
+              <p><span className="text-slate-500 font-bold">COLLECTION:</span> {RECIPES_COLLECTION}</p>
+              <p><span className="text-slate-500 font-bold">QUERY_FILTER:</span> ownerId == "{USER_UID}"</p>
+              <p><span className="text-slate-500 font-bold">RECORDS_FETCHED:</span> {recipes.length}</p>
             </div>
+            
+            {getAuthError() === 'auth/admin-restricted-operation' && (
+              <div className="mt-8 p-6 bg-red-950/20 border-2 border-red-900/50 rounded-2xl flex items-start gap-4">
+                <ShieldAlert className="text-red-500 shrink-0" size={24} />
+                <div>
+                  <p className="text-red-500 font-black uppercase text-[11px] tracking-widest mb-1">Critical: Action Required</p>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                    Anonymous Authentication is <span className="text-white underline font-bold">DISABLED</span> in your Firebase Console. 
+                    <br/><br/>
+                    1. Go to <span className="text-white">Authentication > Sign-in method</span>.
+                    <br/>
+                    2. Add <span className="text-white">Anonymous</span> provider.
+                    <br/>
+                    3. Click <span className="text-white">Enable</span> and Save.
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <div className="mt-8 p-5 bg-green-950/10 border border-green-900/30 rounded-2xl">
-              <p className="text-green-500 font-black mb-2 uppercase text-[10px] tracking-widest">Connection Logic Verification:</p>
-              <p className="text-slate-400 leading-relaxed">The app is using <span className="text-white underline">signInAnonymously</span>. Security rules must allow <span className="text-white">read</span> for <span className="text-white">resource.data.ownerId == "{USER_UID}"</span>. If "ENTITIES_LOADED" is 0 but "LIVE CONNECTION" is green, your database is connected but the ownerId field in your documents doesn't match the target UID.</p>
+              <p className="text-green-500 font-black mb-2 uppercase text-[10px] tracking-widest">Vercel Production Instructions:</p>
+              <p className="text-slate-400 leading-relaxed">
+                Ensure <span className="text-white underline font-bold">API_KEY</span> is set in Vercel Environment Variables for the Gemini Optimizer. 
+                Build command should be empty. Root directory is <span className="text-white">./</span>.
+              </p>
             </div>
           </div>
         )}
@@ -211,7 +241,7 @@ const App: React.FC = () => {
              </div>
              <div>
                <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">KitchenOps</h1>
-               <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] mt-1 ml-0.5">Tactical Kitchen Intelligence</p>
+               <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em] mt-1 ml-0.5">Professional Grade Resource Interleaving</p>
              </div>
           </div>
         </div>
@@ -228,7 +258,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* TABS CONTENT */}
+      {/* OPS TAB */}
       {activeTab === 'ops' && (
         <section className="animate-in fade-in slide-in-from-bottom-8 duration-700 space-y-12">
           
@@ -286,8 +316,8 @@ const App: React.FC = () => {
                       <p className="text-slate-900 font-black text-2xl uppercase tracking-tighter">Inventory Empty</p>
                       <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium px-10">
                         {isLive && recipes.length === 0 
-                          ? `Verification Error: No recipes found for target ID ${USER_UID}. Please check your CMS entries.`
-                          : "Your current search filters returned zero results."}
+                          ? `Verification Status: Live connection established, but zero records found for ownerId "${USER_UID}".`
+                          : "Your current search filters returned zero results from the library."}
                       </p>
                     </div>
                   </div>
@@ -309,7 +339,7 @@ const App: React.FC = () => {
                     <span className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center text-sm shadow-2xl shadow-orange-500/50">02</span>
                     Resource Matrix
                   </h3>
-                  <p className="text-slate-500 text-[11px] font-black uppercase mt-3 tracking-[0.3em] ml-1">Orchestrating {opsSelection.length} Dishes</p>
+                  <p className="text-slate-500 text-[11px] font-black uppercase mt-3 tracking-[0.3em] ml-1">Interleaving {opsSelection.length} selected assets</p>
                 </div>
                 <button 
                   onClick={() => setShowConfig(!showConfig)}
@@ -344,7 +374,7 @@ const App: React.FC = () => {
                     className="w-full py-10 bg-orange-500 hover:bg-orange-400 active:scale-[0.98] disabled:bg-slate-800 text-white font-black rounded-[2.5rem] transition-all shadow-3xl flex items-center justify-center gap-6 text-3xl tracking-tighter uppercase"
                   >
                     {opsLoading ? <RefreshCcw className="animate-spin" size={40} /> : <Flame size={40} />}
-                    {opsLoading ? 'Optimizing Critical Path...' : 'Deploy Interleaved Plan'}
+                    {opsLoading ? 'Compiling Interleaved Plan...' : 'Execute Optimized Ops'}
                   </button>
                 </div>
               )}
@@ -357,11 +387,11 @@ const App: React.FC = () => {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
                 <h3 className="text-3xl font-black text-slate-900 flex items-center gap-5 uppercase tracking-tighter">
                   <span className="w-12 h-12 rounded-[1.25rem] bg-slate-900 text-white flex items-center justify-center text-sm shadow-2xl">03</span>
-                  Tactical Schedule
+                  Interleaved Path
                 </h3>
                 <div className="bg-white border-2 border-slate-50 p-8 rounded-[3rem] shadow-sm flex items-center gap-10">
                   <div className="text-center">
-                    <p className="text-[10px] text-slate-300 uppercase font-black tracking-[0.2em] mb-1">Duration</p>
+                    <p className="text-[10px] text-slate-300 uppercase font-black tracking-[0.2em] mb-1">Total Duration</p>
                     <p className="text-4xl font-black text-slate-900 leading-none">{optimizedResult.totalDuration}<span className="text-xs ml-1 text-slate-400">MIN</span></p>
                   </div>
                   <div className="w-px h-12 bg-slate-100"></div>
@@ -385,16 +415,16 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-start mb-6">
                         <div className="flex flex-wrap gap-3">
                           <span className="text-[11px] font-black text-orange-600 bg-orange-50 px-5 py-2 rounded-2xl uppercase tracking-[0.1em] border border-orange-100 shadow-sm">
-                            Cook {step.assignees.join(' + ')}
+                            Assignees: {step.assignees.join(' & ')}
                           </span>
                           <span className="text-[11px] font-black text-slate-500 bg-slate-50 px-5 py-2 rounded-2xl uppercase tracking-[0.1em] border border-slate-100">
-                            {step.resourceUsed || 'Ops Center'}
+                            {step.resourceUsed || 'Station A'}
                           </span>
                         </div>
                         {step.isParallel && (
                           <div className="flex items-center gap-2 bg-green-50 px-4 py-2 rounded-2xl border border-green-100">
                              <div className="w-2 h-2 rounded-full bg-green-500 animate-ping"></div>
-                             <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">Parallel Execution</span>
+                             <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">Multi-Threaded</span>
                           </div>
                         )}
                       </div>
@@ -415,20 +445,20 @@ const App: React.FC = () => {
         </section>
       )}
 
-      {/* PLANNER TAB IS IDENTICAL IN LOGIC BUT UPDATED STYLING */}
+      {/* PLANNER TAB */}
       {activeTab === 'planner' && (
         <section className="animate-in fade-in slide-in-from-bottom-8 duration-700 space-y-12">
            <div className="bg-white p-12 rounded-[4rem] shadow-2xl border border-slate-50 space-y-12 relative overflow-hidden">
              <div className="absolute -top-10 -right-10 w-64 h-64 bg-orange-50 rounded-full blur-3xl opacity-50"></div>
              <h2 className="font-black text-4xl flex items-center gap-5 text-slate-900 tracking-tighter uppercase relative z-10">
-               <Calendar className="text-orange-500" size={40} /> Strategic Planner
+               <Calendar className="text-orange-500" size={40} /> Tactical Orchestrator
              </h2>
              
              <div className="grid grid-cols-1 md:grid-cols-2 gap-20 relative z-10">
                <div className="space-y-10">
                  <div className="space-y-8">
                    <div className="flex justify-between items-end">
-                     <label className="block text-[11px] font-black text-slate-300 uppercase tracking-[0.3em]">Temporal Window</label>
+                     <label className="block text-[11px] font-black text-slate-300 uppercase tracking-[0.3em]">Operational Window</label>
                      <span className="text-orange-500 text-2xl font-black">{plannerDays} Days</span>
                    </div>
                    <input 
@@ -455,9 +485,9 @@ const App: React.FC = () => {
                </div>
                
                <div className="space-y-6">
-                 <label className="block text-[11px] font-black text-slate-300 uppercase tracking-[0.3em] ml-1">Asset Intelligence (Fridge Contents)</label>
+                 <label className="block text-[11px] font-black text-slate-300 uppercase tracking-[0.3em] ml-1">Asset Intelligence (Fridge Stock)</label>
                  <textarea 
-                   placeholder="Describe current stock: e.g., leftover roast chicken, prime spinach..." 
+                   placeholder="Declare available perishables: e.g., leftover roast chicken, fresh kale..." 
                    className="w-full p-8 bg-slate-50 border border-slate-100 rounded-[3rem] text-xl focus:outline-none focus:ring-12 focus:ring-orange-500/5 focus:border-orange-500/30 h-60 transition-all resize-none font-bold placeholder:text-slate-200 shadow-inner"
                    value={fridgeVeggies}
                    onChange={(e) => setFridgeVeggies(e.target.value)}
@@ -471,7 +501,7 @@ const App: React.FC = () => {
                className="w-full py-10 bg-slate-900 text-white font-black rounded-[3rem] transition-all shadow-3xl hover:bg-slate-800 flex items-center justify-center gap-6 text-3xl tracking-tighter uppercase relative group"
              >
                {plannerLoading ? <RefreshCcw className="animate-spin" size={40} /> : <Calendar size={40} />}
-               {recipes.length === 0 ? 'Connection Required' : (mealPlan.length > 0 ? 'Regenerate Strategy' : 'Initialize Plan')}
+               {recipes.length === 0 ? 'CMS Link Required' : (mealPlan.length > 0 ? 'Regenerate Strategy' : 'Initialize AI Strategy')}
              </button>
            </div>
 
@@ -507,26 +537,26 @@ const App: React.FC = () => {
                   className="w-full py-12 bg-orange-500 text-white font-black rounded-[3.5rem] hover:bg-orange-400 shadow-4xl transition-all flex items-center justify-center gap-6 active:scale-[0.98] text-3xl tracking-tighter uppercase"
                 >
                   <ShoppingCart size={44} className="text-white shadow-2xl" />
-                  Aggregate Logistics (Grocery List)
+                  Compile Supply Chain (Groceries)
                 </button>
              </div>
            )}
         </section>
       )}
 
-      {/* SHOPPING LIST TAB UPDATED */}
+      {/* SHOPPING LIST TAB */}
       {activeTab === 'shopping' && (
         <section className="animate-in fade-in slide-in-from-bottom-8 duration-700">
           <div className="bg-white p-12 rounded-[4rem] shadow-4xl border border-slate-50 space-y-12">
             <div className="flex justify-between items-center">
               <h2 className="font-black text-4xl flex items-center gap-6 text-slate-900 tracking-tighter uppercase">
-                <ShoppingCart className="text-orange-500" size={44} /> Logistics Report
+                <ShoppingCart className="text-orange-500" size={44} /> Inventory Logistics
               </h2>
               <button 
                 onClick={() => setShoppingList(prev => prev.filter(i => !i.checked))}
                 className="text-[11px] font-black text-slate-400 hover:text-red-500 uppercase tracking-[0.3em] transition-all bg-slate-50 px-8 py-4 rounded-[1.5rem] border border-slate-100 flex items-center gap-3"
               >
-                <Trash2 size={20} /> Clear Verified
+                <Trash2 size={20} /> Purge Checked
               </button>
             </div>
 
@@ -561,8 +591,8 @@ const App: React.FC = () => {
                       <div className="absolute inset-0 bg-slate-100/50 rounded-full animate-ping"></div>
                    </div>
                    <div>
-                     <p className="text-slate-900 font-black text-3xl uppercase tracking-widest">Logistics Ready</p>
-                     <p className="text-slate-400 text-lg mt-4 max-w-sm mx-auto font-medium leading-relaxed">Your supply chain is optimized. Generate a plan to populate the tactical grocery list.</p>
+                     <p className="text-slate-900 font-black text-3xl uppercase tracking-widest">Supply Chain Optimized</p>
+                     <p className="text-slate-400 text-lg mt-4 max-w-sm mx-auto font-medium leading-relaxed">No logistics pending. Generate a strategy to populate the tactical grocery report.</p>
                    </div>
                 </div>
               )}
@@ -578,7 +608,7 @@ const App: React.FC = () => {
         </section>
       )}
 
-      {/* STICKY NAV REFINED */}
+      {/* STICKY NAV */}
       <nav className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-3xl border border-white/10 py-6 px-16 flex justify-between items-center gap-24 z-50 shadow-[0_30px_100px_rgba(0,0,0,0.6)] rounded-[3.5rem]">
         {[
           { id: 'ops', label: 'OPS', icon: Flame },
