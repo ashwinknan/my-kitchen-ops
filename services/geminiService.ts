@@ -2,6 +2,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Recipe, OptimizedSchedule } from "../types";
 
 /**
+ * Robustly retrieves the API key from the environment.
+ */
+const getApiKey = () => {
+  const key = (window as any).process?.env?.API_KEY || process.env.API_KEY || "";
+  return key;
+};
+
+/**
  * Helper to robustly extract JSON from a model response string.
  */
 const extractJson = (text: string) => {
@@ -22,8 +30,8 @@ export const optimizeCookingOps = async (
   cooks: number, 
   stoves: number
 ): Promise<OptimizedSchedule> => {
-  // Use a fresh instance to pick up the latest process.env.API_KEY
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = getApiKey();
+  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
     You are a professional chef. I need to cook ${recipes.length} dishes with ${cooks} people and ${stoves} stove burners.
@@ -81,9 +89,8 @@ export const optimizeCookingOps = async (
     return JSON.parse(jsonStr) as OptimizedSchedule;
   } catch (error: any) {
     console.error("Gemini Error:", error);
-    // If the error suggests entity not found, it often means the API key is invalid or project not linked
     if (error.message?.includes("Requested entity was not found")) {
-      throw new Error("API Key configuration error. Please re-link your API Key in the System Console.");
+      throw new Error("Project mismatch. Ensure your API key is from a project with billing enabled.");
     }
     throw new Error(error.message || "Failed to generate cooking plan.");
   }
@@ -97,7 +104,8 @@ export const suggestMealPlan = async (
     fridgeVeggies: string,
     days: number
   ): Promise<string[]> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `
       Recipes: ${allRecipes.map(r => `${r.dishName} (${r.category})`).join(', ')}
