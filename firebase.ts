@@ -16,16 +16,18 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// A promise that resolves when we have a valid auth state (even anonymous)
+// A promise that resolves when we have a valid auth state
 export const authReady = new Promise<User | null>((resolve) => {
-  onAuthStateChanged(auth, (user) => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    console.log("Firebase Auth State Changed:", user?.uid || "Not Authenticated");
     resolve(user);
+    // Note: We don't unsubscribe immediately to allow UI to react to changes if needed
   });
 });
 
-// Attempt to sign in anonymously
+// Auto-trigger anonymous sign-in for the Ops app
 signInAnonymously(auth).catch((err) => {
-  console.warn("Firebase Anonymous Auth failed. Check if 'Anonymous' provider is enabled in Firebase Console.", err.message);
+  console.error("Firebase Anonymous Auth failed:", err.message);
 });
 
 export const RECIPES_COLLECTION = 'recipes';
