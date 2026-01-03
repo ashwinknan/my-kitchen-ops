@@ -16,6 +16,9 @@ const App: React.FC = () => {
   const [connError, setConnError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
+  // This is a public identifier for your CMS records, not a secret key.
+  const CMS_OWNER_ID = "kg6Lv5lXacPqbWsjZAYr0WrEx0e2";
+
   // Ops State
   const [opsSelection, setOpsSelection] = useState<Recipe[]>([]);
   const [cookCount, setCookCount] = useState(2);
@@ -197,7 +200,7 @@ const App: React.FC = () => {
               <p><span className="text-slate-500 font-bold">AUTH_STATUS:</span> {getAuthError() || (auth.currentUser ? 'AUTHENTICATED' : 'ANONYMOUS_DISABLED')}</p>
               <p><span className="text-slate-500 font-bold">AUTH_UID:</span> {auth.currentUser?.uid || 'NULL'}</p>
               <p><span className="text-slate-500 font-bold">COLLECTION:</span> {RECIPES_COLLECTION}</p>
-              <p><span className="text-slate-500 font-bold">QUERY_FILTER:</span> ownerId == "{auth.currentUser?.uid || '??'}"</p>
+              <p><span className="text-slate-500 font-bold">QUERY_FILTER:</span> ownerId == "{CMS_OWNER_ID}"</p>
               <p><span className="text-slate-500 font-bold">RECORDS_FETCHED:</span> {recipes.length}</p>
             </div>
             
@@ -313,7 +316,7 @@ const App: React.FC = () => {
                       <p className="text-slate-900 font-black text-2xl uppercase tracking-tighter">Inventory Empty</p>
                       <p className="text-slate-400 text-sm max-w-sm mx-auto mt-2 font-medium px-10">
                         {isLive && recipes.length === 0 
-                          ? `Verification Status: Live connection established, but zero records found for ownerId "${auth.currentUser?.uid || '??'}".`
+                          ? `Verification Status: Live connection established, but zero records found for ownerId "${CMS_OWNER_ID}".`
                           : "Your current search filters returned zero results from the library."}
                       </p>
                     </div>
@@ -469,7 +472,7 @@ const App: React.FC = () => {
                  <div className="grid grid-cols-3 gap-6 bg-slate-50 p-8 rounded-[3rem] border border-slate-100 shadow-inner">
                    {Object.entries(plannerServings).map(([key, val]) => (
                      <div key={key} className="space-y-4">
-                       <label className="block text-[9px] font-black text-slate-400 uppercase text-center tracking-[0.2em]">{key}</label>
+                       <label className="block text-[9px] font-black text-slate-400 uppercase text-center tracking-wide">{key}</label>
                        <input 
                          type="number" 
                          className="w-full bg-white border border-slate-100 rounded-[1.5rem] py-4 text-center text-2xl font-black focus:ring-8 focus:ring-orange-500/5 transition-all shadow-sm" 

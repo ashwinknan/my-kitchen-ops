@@ -12,11 +12,9 @@
         body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
         #root { min-height: 100vh; }
     </style>
-    <!-- Runtime shim for process.env.API_KEY as required by Gemini SDK technical guidelines -->
+    <!-- Shim for process.env used by the Gemini SDK -->
     <script>
-      window.process = window.process || {};
-      window.process.env = window.process.env || {};
-      window.process.env.API_KEY = ""; 
+      window.process = window.process || { env: {} };
     </script>
 <script type="importmap">
 {
